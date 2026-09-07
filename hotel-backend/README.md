@@ -6,6 +6,11 @@
 cd hotel-backend
 pip install -r requirements.txt
 ```
+## Run mysql server
+Create mysql server and copy its address to .env as shown .env.example
+run command
+'''CREATE DATABASE hotel_db;'''
+'''USE hotel_db;'''
 
 ## Admin session
 
@@ -69,9 +74,13 @@ Authorization: Bearer <access_token>
 
 Admin sessions expire after 60 minutes.
 
+
+
 # Run uvicorn
 ''' uvicorn app.main:app --reload '''
 run it from /home-backend/ directory
+
+
 
 # Swagger UI for endpoints
 to access swagger UI go to your server address followed by /docs
