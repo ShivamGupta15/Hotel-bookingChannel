@@ -1,11 +1,13 @@
 from app.database.base import Base
 from app.database.connection import engine
+from app.models.payment import Payment
+from app.models.coupon import Coupon
 #from app.models.room import Room
 from fastapi import FastAPI
 #from app.models.booking import Booking
 from app.api.routes import bookings,availability
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routes import rooms, admin
+from app.api.routes import rooms, admin, payments
 
 
 app = FastAPI(
@@ -29,6 +31,7 @@ app.include_router(admin.router)  # Include the admin router
 app.include_router(rooms.router)
 app.include_router(bookings.router)
 app.include_router(availability.router)  # Include the availability router
+app.include_router(payments.router)
 Base.metadata.create_all(bind=engine)
 
 @app.get("/")

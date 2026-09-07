@@ -99,6 +99,122 @@ button {
   border-left: 4px solid #b65d3b;
 }
 
+.admin-section-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.admin-section-tabs button.active {
+  background: #b65d3b;
+}
+
+.booking-admin-section {
+  min-width: 0;
+}
+
+.booking-admin-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.booking-admin-header h2 {
+  margin: 0 0 18px;
+}
+
+.booking-table-wrapper {
+  overflow-x: auto;
+}
+
+.booking-table {
+  width: 100%;
+  min-width: 1120px;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 13px;
+}
+
+.booking-table th,
+.booking-table td {
+  padding: 11px 10px;
+  border-bottom: 1px solid #dce2dc;
+  text-align: left;
+  vertical-align: top;
+}
+
+.booking-table th {
+  color: #31524b;
+  background: #f5f5f5;
+  font-size: 11px;
+  text-transform: uppercase;
+}
+
+.monospace,
+.signature-cell {
+  max-width: 180px;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 11px;
+}
+
+.admin-activity {
+  color: #59716a;
+  font-size: 11px;
+}
+
+.booking-actions {
+  min-width: 190px;
+}
+
+.booking-actions button {
+  margin: 0 4px 4px 0;
+  padding: 7px 9px;
+  font-size: 12px;
+}
+
+.booking-actions button:disabled {
+  cursor: not-allowed;
+  opacity: .45;
+}
+
+.coupon-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.coupon-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: #31524b;
+  font-size: 12px;
+}
+
+.coupon-form input,
+.coupon-form select {
+  min-width: 130px;
+  padding: 9px;
+  font-size: 14px;
+}
+
+.coupon-list {
+  display: grid;
+  gap: 8px;
+}
+
+.coupon-row {
+  display: grid;
+  grid-template-columns: 1.5fr 1fr 1fr 1fr;
+  gap: 12px;
+  padding: 12px;
+  background: #f5f5f5;
+}
+
 .calendar-instructions {
   margin: -8px 0 18px;
   color: #59716a;

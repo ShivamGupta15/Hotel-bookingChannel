@@ -74,6 +74,31 @@ Authorization: Bearer <access_token>
 
 Admin sessions expire after 60 minutes.
 
+## Razorpay payments
+
+Configure these environment variables before starting the API:
+
+```dotenv
+RAZORPAY_KEY_ID="your-key-id"
+RAZORPAY_KEY_SECRET="your-key-secret"
+RAZORPAY_WEBHOOK_SECRET="your-webhook-secret"
+```
+
+`API_KEY` and `SECRET_KEY` are also accepted as backwards-compatible names for
+the Razorpay key ID and key secret. Configure `RAZORPAY_WEBHOOK_SECRET` for
+webhook verification.
+
+Payment endpoints:
+
+- `POST /api/v1/payments/orders` creates one Razorpay order and local payment attempt.
+- `POST /api/v1/payments/verify` verifies the checkout signature and confirms the booking.
+- `POST /api/v1/payments/webhook` verifies Razorpay webhook signatures and processes payment events.
+- `PUT /api/v1/bookings/{booking_id}/cancel` lets a customer cancel and refunds its captured payment.
+- `PUT /admin/bookings/{booking_id}/cancel` lets an authenticated admin cancel without refunding.
+- `PUT /admin/bookings/{booking_id}/refund` issues a full refund and cancels the booking.
+
+Install dependencies with `pip install -r requirements.txt`.
+
 
 
 # Run uvicorn

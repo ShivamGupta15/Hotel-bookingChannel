@@ -1,8 +1,13 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.models.room import Room, RoomInventory
+from app.models.booking import Booking
+from app.models.coupon import Coupon
+from app.models.payment import Payment
 from app.schemas.admin import (
     AdminLoginRequest,
     AdminTokenResponse,
@@ -14,7 +19,9 @@ from app.schemas.room import (
     RoomInventoryResponse,
     RoomInventoryUpdate,
 )
+from app.schemas.coupon import CouponCreate, CouponResponse
 from app.security import authenticate_admin, create_access_token, require_admin
+from app.services.payment_service import PaymentService
 
 
 router = APIRouter(
@@ -37,6 +44,122 @@ def admin_login(credentials: AdminLoginRequest):
         access_token=access_token,
         expires_in=expires_in,
     )
+
+
+@router.post("/coupons", response_model=CouponResponse, status_code=status.HTTP_201_CREATED)
+def create_coupon(
+    coupon_data: CouponCreate,
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    code = coupon_data.code.strip().upper()
+    if coupon_data.valid_until and coupon_data.valid_from and coupon_data.valid_until < coupon_data.valid_from:
+        raise HTTPException(status_code=422, detail="Coupon end date must be after start date")
+    if coupon_data.discount_type == "PERCENTAGE" and coupon_data.discount_value > 100:
+        raise HTTPException(status_code=422, detail="Percentage discount cannot exceed 100")
+    if db.query(Coupon).filter(Coupon.code == code).first():
+        raise HTTPException(status_code=409, detail="Coupon code already exists")
+    coupon = Coupon(
+        code=code,
+        discount_type=coupon_data.discount_type,
+        discount_value=coupon_data.discount_value,
+        max_discount=coupon_data.max_discount,
+        valid_from=coupon_data.valid_from,
+        valid_until=coupon_data.valid_until,
+        usage_limit=coupon_data.usage_limit,
+    )
+    db.add(coupon)
+    db.commit()
+    db.refresh(coupon)
+    return coupon
+
+
+@router.get("/coupons", response_model=list[CouponResponse])
+def list_coupons(
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    return db.query(Coupon).order_by(Coupon.created_at.desc()).all()
+
+
+@router.put("/bookings/{booking_id}/cancel", response_model=dict)
+def admin_cancel_booking(
+    booking_id: str,
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    booking = PaymentService(db).cancel_booking(booking_id)
+    booking.admin_activity = f"Admin cancelled booking at {datetime.utcnow().isoformat()}Z"
+    db.commit()
+    return {
+        "booking_id": booking.booking_id,
+        "status": booking.status,
+    }
+
+
+@router.get("/bookings", response_model=list[dict])
+def admin_list_bookings(
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    bookings = db.query(Booking).order_by(Booking.check_in.desc()).all()
+    result = []
+    for booking in bookings:
+        payment = db.query(Payment).filter(
+            Payment.booking_id == booking.booking_id
+        ).order_by(Payment.payment_id.desc()).first()
+        result.append({
+            "booking_id": booking.booking_id,
+            "room_id": booking.room_id,
+            "guest_name": booking.guest_name,
+            "phone": booking.phone,
+            "email": booking.email,
+            "check_in": booking.check_in.strftime("%d-%m-%Y"),
+            "check_out": booking.check_out.strftime("%d-%m-%Y"),
+            "booking_status": booking.status,
+            "admin_activity": booking.admin_activity,
+            "coupon_code": booking.coupon_code,
+            "subtotal_amount": str(booking.subtotal_amount) if booking.subtotal_amount is not None else None,
+            "discount_amount": str(booking.discount_amount) if booking.discount_amount is not None else "0.00",
+            "total_amount": str(booking.total_amount) if booking.total_amount is not None else None,
+            "payment_status": payment.status if payment else None,
+            "payment_amount": str(payment.amount) if payment else None,
+            "razorpay_order_id": payment.provider_order_id if payment else None,
+            "razorpay_payment_id": payment.provider_payment_id if payment else None,
+            "razorpay_signature": payment.provider_signature if payment else None,
+            "provider_refund_id": payment.provider_refund_id if payment else None,
+            "refunded_amount": str(payment.refunded_amount) if payment else "0.00",
+        })
+    return result
+
+
+@router.put("/bookings/{booking_id}/confirm", response_model=dict)
+def admin_confirm_booking(
+    booking_id: str,
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    booking = db.query(Booking).filter(Booking.booking_id == booking_id).first()
+    if not booking:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    if booking.status == "CANCELLED":
+        raise HTTPException(status_code=409, detail="Cancelled booking cannot be confirmed")
+    booking.status = "CONFIRMED"
+    booking.admin_activity = f"Admin confirmed booking at {datetime.utcnow().isoformat()}Z"
+    db.commit()
+    return {"booking_id": booking.booking_id, "status": booking.status}
+
+
+@router.put("/bookings/{booking_id}/refund", response_model=dict)
+def admin_refund_booking(
+    booking_id: str,
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    booking = PaymentService(db).refund_booking(booking_id)
+    booking.admin_activity = f"Admin refunded booking at {datetime.utcnow().isoformat()}Z"
+    db.commit()
+    return {"booking_id": booking.booking_id, "status": booking.status}
 
 
 @router.post(

@@ -1,6 +1,7 @@
 from datetime import date
+from decimal import Decimal
 
-from sqlalchemy import Date, ForeignKey, Integer, String
+from sqlalchemy import Date, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
@@ -9,7 +10,7 @@ import string
 #Generate 6character a;phanueric booking ID
 def generate_booking_id():
     characters = string.ascii_uppercase + string.digits
-    return "HLLG" + "".join(
+    return "TEST" + "".join(
         secrets.choice(characters)
         for _ in range(6)
     )
@@ -65,5 +66,15 @@ class Booking(Base):
         default="PENDING",
         nullable=False
     )
+
+    admin_activity: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+    )
+
+    coupon_code: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    subtotal_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    discount_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    total_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
 
     room = relationship("Room")
