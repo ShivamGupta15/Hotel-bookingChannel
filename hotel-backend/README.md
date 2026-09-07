@@ -1,6 +1,9 @@
 # Hotel backend
+## Step1 install dependencies
+- cd /hotel-backend/
+- pip install -r requirement.txt
 
-## Admin session
+## Step2 Admin session
 
 Configure these environment variables before starting the API:
 
@@ -11,8 +14,12 @@ Configure these environment variables before starting the API:
 Generate a password hash with:
 
 ```bash
-python -c 'from app.security import hash_password; print(hash_password(input("Password: ")))' 
+python -c 'from app.security import hash_password; print(hash_password(input("Password: ")))'
 ```
+get JWT secret key
+
+'''bash
+
 
 Log in with `POST /admin/login`:
 
