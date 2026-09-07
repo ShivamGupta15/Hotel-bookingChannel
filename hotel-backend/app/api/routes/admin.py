@@ -3,7 +3,12 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.models.room import Room, RoomInventory
-from app.schemas.admin import AdminLoginRequest, AdminTokenResponse
+from app.schemas.admin import (
+    AdminLoginRequest,
+    AdminTokenResponse,
+    BulkInventoryUpdateRequest,
+    BulkInventoryUpdateResponse,
+)
 from app.schemas.room import (
     RoomInventoryCreate,
     RoomInventoryResponse,
@@ -31,6 +36,55 @@ def admin_login(credentials: AdminLoginRequest):
     return AdminTokenResponse(
         access_token=access_token,
         expires_in=expires_in,
+    )
+
+
+@router.post(
+    "/inventory/bulk",
+    response_model=BulkInventoryUpdateResponse,
+)
+def bulk_update_inventory(
+    inventory: BulkInventoryUpdateRequest,
+    _: dict = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    room = db.query(Room).filter(Room.room_id == inventory.room_id).first()
+    if not room:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Room not found",
+        )
+
+    dates = list(dict.fromkeys(inventory.dates))
+    existing_inventory = db.query(RoomInventory).filter(
+        RoomInventory.room_id == inventory.room_id,
+        RoomInventory.date.in_(dates),
+    ).all()
+    existing_by_date = {item.date: item for item in existing_inventory}
+
+    created_count = 0
+    updated_count = 0
+    for selected_date in dates:
+        item = existing_by_date.get(selected_date)
+        if item:
+            item.available_rooms = inventory.available_rooms
+            updated_count += 1
+        else:
+            db.add(RoomInventory(
+                room_id=inventory.room_id,
+                date=selected_date,
+                available_rooms=inventory.available_rooms,
+            ))
+            created_count += 1
+
+    db.commit()
+
+    return BulkInventoryUpdateResponse(
+        room_id=inventory.room_id,
+        dates=dates,
+        available_rooms=inventory.available_rooms,
+        created_count=created_count,
+        updated_count=updated_count,
     )
 
 
