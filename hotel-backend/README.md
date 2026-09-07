@@ -8,7 +8,6 @@ pip install -r requirements.txt
 ```
 
 ## Admin session
-
 Create a local environment file from the template:
 
 ```bash
@@ -27,7 +26,6 @@ Copy the generated value into `.env` as `JWT_SECRET_KEY`:
 ```dotenv
 JWT_SECRET_KEY="paste-the-generated-value-here"
 ```
-
 Keep this key private. Changing it invalidates all existing admin tokens. The `.env` file is ignored by Git.
 
 Configure these environment variables in `.env` before starting the API:
