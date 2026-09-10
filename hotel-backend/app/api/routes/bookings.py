@@ -23,121 +23,120 @@ def create_booking(
     booking_data: BookingCreate,
     db: Session = Depends(get_db)
 ):
-    # Check if room exists
-    room = db.query(Room).filter(
-        Room.room_id == booking_data.room_id
-    ).first()
-
-    if not room:
-        raise HTTPException(
-            status_code=404,
-            detail="Room not found"
-        )
-
-    if booking_data.check_in >= booking_data.check_out:
-        raise HTTPException(
-            status_code=400,
-            detail="Check-out date must be after check-in date"
-        )
-
-    stay_dates = []
-    current_date = booking_data.check_in
-    while current_date < booking_data.check_out:
-        stay_dates.append(current_date)
-        current_date += timedelta(days=1)
-
-    inventory_rows = db.query(RoomInventory).filter(
-        RoomInventory.room_id == booking_data.room_id,
-        RoomInventory.date.in_(stay_dates),
-    ).all()
-    inventory_by_date = {item.date: item for item in inventory_rows}
-    overlapping_bookings = db.query(Booking).filter(
-        Booking.room_id == booking_data.room_id,
-        Booking.status != "CANCELLED",
-        Booking.check_in < booking_data.check_out,
-        Booking.check_out > booking_data.check_in,
-    ).all()
-
-    for stay_date in stay_dates:
-        inventory = inventory_by_date.get(stay_date)
-        if not inventory:
-            raise HTTPException(
-                status_code=409,
-                detail=f"Room inventory is not configured for {stay_date.strftime('%d-%m-%Y')}",
-            )
-
-        booked_rooms = sum(
-            1
-            for existing_booking in overlapping_bookings
-            if existing_booking.check_in <= stay_date < existing_booking.check_out
-        )
-        if booked_rooms >= inventory.available_rooms:
-            raise HTTPException(
-                status_code=409,
-                detail="Room is not available for these dates",
-            )
-
-    if booking_data.guests <= 0:
-        raise HTTPException(
-            status_code=400,
-            detail="Number of guests must be at least 1"
-        )
-
-    if booking_data.guests > room.capacity:
-        raise HTTPException(
-            status_code=400,
-            detail=f"This room can accommodate a maximum of {room.capacity} guests"
-        )
-
-    subtotal_amount = Decimal(room.price_per_night * len(stay_dates))
-    discount_amount = Decimal("0.00")
-    coupon = None
-    if booking_data.coupon_code:
-        coupon = db.query(Coupon).filter(
-            Coupon.code == booking_data.coupon_code.strip().upper(),
-            Coupon.is_active.is_(True),
+    with db.begin():
+        # Lock the room row so availability checks and the booking insert are atomic.
+        room = db.query(Room).with_for_update().filter(
+            Room.room_id == booking_data.room_id
         ).first()
-        today = date.today()
-        if not coupon or (
-            coupon.valid_from and today < coupon.valid_from
-        ) or (
-            coupon.valid_until and today > coupon.valid_until
-        ) or (
-            coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit
-        ):
-            raise HTTPException(status_code=400, detail="Invalid or expired coupon")
 
-        if coupon.discount_type == "PERCENTAGE":
-            discount_amount = subtotal_amount * coupon.discount_value / Decimal("100")
-            if coupon.max_discount is not None:
-                discount_amount = min(discount_amount, coupon.max_discount)
-        else:
-            discount_amount = coupon.discount_value
-        discount_amount = min(discount_amount, subtotal_amount)
+        if not room:
+            raise HTTPException(
+                status_code=404,
+                detail="Room not found"
+            )
 
-    total_amount = subtotal_amount - discount_amount
+        if booking_data.check_in >= booking_data.check_out:
+            raise HTTPException(
+                status_code=400,
+                detail="Check-out date must be after check-in date"
+            )
 
-    # Create booking
-    booking = Booking(
-        room_id=booking_data.room_id,
-        guest_name=booking_data.guest_name,
-        email=booking_data.email,
-        phone=booking_data.phone,
-        check_in=booking_data.check_in,
-        check_out=booking_data.check_out,
-        guests=booking_data.guests,
-        coupon_code=coupon.code if coupon else None,
-        subtotal_amount=subtotal_amount,
-        discount_amount=discount_amount,
-        total_amount=total_amount,
-    )
+        stay_dates = []
+        current_date = booking_data.check_in
+        while current_date < booking_data.check_out:
+            stay_dates.append(current_date)
+            current_date += timedelta(days=1)
 
-    if coupon:
-        coupon.used_count += 1
+        inventory_rows = db.query(RoomInventory).filter(
+            RoomInventory.room_id == booking_data.room_id,
+            RoomInventory.date.in_(stay_dates),
+        ).all()
+        inventory_by_date = {item.date: item for item in inventory_rows}
+        overlapping_bookings = db.query(Booking).filter(
+            Booking.room_id == booking_data.room_id,
+            Booking.status != "CANCELLED",
+            Booking.check_in < booking_data.check_out,
+            Booking.check_out > booking_data.check_in,
+        ).all()
 
-    db.add(booking)
-    db.commit()
-    db.refresh(booking)
+        for stay_date in stay_dates:
+            inventory = inventory_by_date.get(stay_date)
+            if not inventory:
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"Room inventory is not configured for {stay_date.strftime('%d-%m-%Y')}",
+                )
+
+            booked_rooms = sum(
+                1
+                for existing_booking in overlapping_bookings
+                if existing_booking.check_in <= stay_date < existing_booking.check_out
+            )
+            if booked_rooms >= inventory.available_rooms:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Room is not available for these dates",
+                )
+
+        if booking_data.guests <= 0:
+            raise HTTPException(
+                status_code=400,
+                detail="Number of guests must be at least 1"
+            )
+
+        if booking_data.guests > room.capacity:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This room can accommodate a maximum of {room.capacity} guests"
+            )
+
+        subtotal_amount = Decimal(room.price_per_night * len(stay_dates))
+        discount_amount = Decimal("0.00")
+        coupon = None
+        if booking_data.coupon_code:
+            coupon = db.query(Coupon).filter(
+                Coupon.code == booking_data.coupon_code.strip().upper(),
+                Coupon.is_active.is_(True),
+            ).first()
+            today = date.today()
+            if not coupon or (
+                coupon.valid_from and today < coupon.valid_from
+            ) or (
+                coupon.valid_until and today > coupon.valid_until
+            ) or (
+                coupon.usage_limit is not None and coupon.used_count >= coupon.usage_limit
+            ):
+                raise HTTPException(status_code=400, detail="Invalid or expired coupon")
+
+            if coupon.discount_type == "PERCENTAGE":
+                discount_amount = subtotal_amount * coupon.discount_value / Decimal("100")
+                if coupon.max_discount is not None:
+                    discount_amount = min(discount_amount, coupon.max_discount)
+            else:
+                discount_amount = coupon.discount_value
+            discount_amount = min(discount_amount, subtotal_amount)
+
+        total_amount = subtotal_amount - discount_amount
+
+        booking = Booking(
+            room_id=booking_data.room_id,
+            guest_name=booking_data.guest_name,
+            email=booking_data.email,
+            phone=booking_data.phone,
+            check_in=booking_data.check_in,
+            check_out=booking_data.check_out,
+            guests=booking_data.guests,
+            coupon_code=coupon.code if coupon else None,
+            subtotal_amount=subtotal_amount,
+            discount_amount=discount_amount,
+            total_amount=total_amount,
+        )
+
+        if coupon:
+            coupon.used_count += 1
+
+        db.add(booking)
+        db.flush()
 
     return booking
 #to retrieve Booking detail by booking id--------------------------------
